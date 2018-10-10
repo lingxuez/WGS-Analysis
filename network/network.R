@@ -3,14 +3,39 @@
 rm(list=ls())
 library(supernodeWGS) #make sure to install the supernodeWGS R package first, provided.
 
+#########################################################
+## 1. Extracting and saving blocks of the correlation matrix for ease of usage
+#########################################################
+
+suffix <- "promoter"
+
+load(paste0("supernodeWGS_results/clustering_", suffix, ".RData"))
+load(paste0("supernodeWGS_results/cor_", suffix, ".RData"))
+
+K <- max(clustering$Cluster)
+
+print("Start")
+max_val <- K*(K-1)/2 + K
+for(i in 1:max_val){
+  idx <- supernodeWGS::index_to_pair(i, K)
+  idx1 <- which(clustering$Cluster == idx[1])
+  idx2 <- which(clustering$Cluster == idx[2])
+
+  cor_block <- dat[idx1, idx2]
+  save(cor_block, file = paste0("supernodeWGS_results/blocks_", suffix, "/", i, ".RData"))
+  print(paste0("Completed ", i, " out of ", max_val))
+}
+
+#########################################################
+## 2. Loading in and preprocessing the data
+#########################################################
+
 suffix <- "promoter"
 count_threshold <- 20
 cor_threshold <- 0.12
 size_threshold <- 2
 cores <- 4
 
-#some cleanup first
-### load in the appropriate clustering
 load(paste0("supernodeWGS_results/clustering_", suffix, ".RData"))
 dat1 <- clustering
 K <- max(dat1$Cluster)
@@ -28,8 +53,6 @@ name2 <- as.character(dat2$Annotation_combo)
 idx <- supernodeWGS::matching(name1, name2)
 vec1 <- vec2[idx]
 risk1 <- risk2[idx]
-
-#########
 
 # find out which indices have too few permutations, and then compute test statistics
 count_vec2 <- dat2$Total_count_raw
@@ -58,15 +81,18 @@ risk1 <- log(risk1)
 flag_vec2 <- flag_vec
 flag_vec2[is.infinite(risk1)] <- TRUE
 
-#########
-
+#########################################################
+## 3. Compute the graph based on the correlation matrix
+#########################################################
 cor_mat <- supernodeWGS::form_correlation(path = paste0("supernodeWGS_results/blocks_", suffix, "/"),
                             K = cluster_idx, max_cluster = K, cores = cores)
 
 g <- supernodeWGS::form_graph_from_correlation(cor_mat, func = function(x){x>cor_threshold}, K = cluster_idx)
 adj <- as.matrix(igraph::as_adjacency_matrix(g))
 
-########
+#########################################################
+## 4. Compute the test statistics for each cluster
+#########################################################
 testvec_res <- supernodeWGS::form_testvec(vec1, clustering, flag_vec,
                                   path = paste0("supernodeWGS_results/blocks_", suffix, "/"),
                                   K = cluster_idx, max_cluster = K, cores = cores, sparse = T,
@@ -85,13 +111,17 @@ tmp <- riskvec_res$vec
 tmp[is.na(tmp)] <- 0
 risk_supernode <- exp(tmp)
 
-##########
+#########################################################
+## 5. Apply DAWN to find the significance of each cluster
+#########################################################
 
 res <- supernodeWGS::hmrf(zval_supernode, adj,
                           seedindex = rep(0, length(cluster_idx)), verbose = T)
 fdr <- supernodeWGS::report_results(cluster_idx, 1-res$post, 1-stats::pnorm(zval_supernode), res$Iupdate)
 
-##########
+#########################################################
+## 6. Output the relevant plots and CSVs
+#########################################################
 
 # dawn graph, with color based on the significance
 node_size <- sapply(cluster_idx, function(x){
@@ -101,8 +131,6 @@ node_col <- rep("white", length(zval_supernode))
 set.seed(10)
 igraph::plot.igraph(g, vertex.size = node_size, vertex.label = NA,
                     vertex.color = node_col, main = "Gene graph")
-
-#######
 
 ### output CSVs
 # pvalues

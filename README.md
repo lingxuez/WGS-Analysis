@@ -9,3 +9,6 @@ For data generation, please refer to [https://github.com/sanderslab/WGS-pipeline
   + Compute the p-value: ``risk_score/significance_r2.R``
 + Annotation clustering
   + Spectral clustering of annotation categories: ``clustering/clustering.R``
++ Network analysis
+  + Forming the graph and determining the significance of each cluster of nodes: ``network/network.R``
+  + Because many custom functions are needed for this step, a supplemental R package is located in ``network/supernodeWGS'' to encapsulate all the needed functions
